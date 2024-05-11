@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
 
+    'django_filters',
+    
     'djoser',
 
     'backend.apps.BackendConfig',
@@ -159,7 +161,6 @@ DJOSER = {
     'USERNAME_RESET_CONFIRM_URL': '#/username/reset/confirm/{uid}/{token}',
     'ACTIVATION_URL': 'user/activate/{uid}/{token}',
     'SEND_ACTIVATION_EMAIL': True,
-    # 'SERIALIZERS': {},
     'SERIALIZERS': {'user_create': 'backend.serializers.CastomUserCreateSerializer',
                     'current_user': 'backend.serializers.CastomUserSerializer',},
 }
