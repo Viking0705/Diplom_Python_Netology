@@ -19,41 +19,24 @@ import requests
 
 from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order
 from .serializers import  ContactSerializer, ShopSerializer, ProductInfoSerializer
-from .permissions import IsOwner, IsOwnerOrReadOnly, IsShop, IsOwnerProdInf
+from .permissions import IsOwner, IsOwnerOrReadOnly, IsShop, IsOwnerProdInf, IsBuyer
 
 
 from django.core.validators import URLValidator
 
+from django.conf import settings
+
+from django.core.mail import send_mail
+
 class ContactViewSet(ModelViewSet):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
-    permission_classes = [IsAuthenticated, IsOwner]
+    permission_classes = [IsAuthenticated, IsOwner, IsBuyer]
 
-    def count_rec(self, request):
-        query = Q(user=request.user.id)
-        phone_count = Contact.objects.filter(query & ~Q(phone='')).count()
-        print(phone_count)
-        adress_count = Contact.objects.filter(query & ~Q(adress='')).count()
-        print(adress_count)
-        if request.data.get('phone') == '' and request.data.get('adress') == '':
-            raise ValidationError({'error': 'Заполните телефон или адрес', 'status': status.HTTP_400_BAD_REQUEST})
-        elif (request.data.get('phone') != '' and phone_count >= 1) or (request.data.get('adress') != '' and adress_count >= 5):
-            raise ValidationError({'error': 'Вы можете добавить не более 1 телефона и 5 адресов', 'status': status.HTTP_400_BAD_REQUEST})
-        else:
-            return True
-        
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+        return super().perform_create(serializer)
     
-    def create(self, request, *args, **kwargs):
-        if self.count_rec(request):
-            return super().create(request, *args, **kwargs)
-        
-    def update(self, request, *args, **kwargs):
-        if self.count_rec(request):
-            return super().update(request, *args, **kwargs)
-
-    def partial_update(self, request, *args, **kwargs):   
-        if self.count_rec(request):
-            return super().partial_update(request, *args, **kwargs)
         
 class LoadCatalog(APIView):
     permission_classes = [IsAuthenticated, IsShop,]
@@ -119,7 +102,7 @@ class ProductInfoViewSet(ModelViewSet):
     serializer_class = ProductInfoSerializer
 
     def get_queryset(self):
-        return ProductInfo.objects.all().filter(shop__state=True)
+        return ProductInfo.objects.filter(shop__state=True)
 
     def get_permissions(self):
         print(self.action)
@@ -129,3 +112,10 @@ class ProductInfoViewSet(ModelViewSet):
             permission_classes = [IsAuthenticated, IsShop, IsOwnerProdInf]
         return [permission() for permission in permission_classes]
     
+
+class BasketViewSet(ModelViewSet):
+    queryset = Order.objects.all()
+    permission_classes = [IsAuthenticated, IsBuyer, IsOwner]
+
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)

@@ -44,10 +44,10 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework.authtoken',
-
-    'django_filters',
     
     'djoser',
+
+    'django_filters',
 
     'backend.apps.BackendConfig',
 ]
@@ -155,6 +155,8 @@ EMAIL_USE_SSL = True
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+
+# EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 DJOSER = {
     'PASSWORD_RESET_CONFIRM_URL': '#/password/reset/confirm/{uid}/{token}', 

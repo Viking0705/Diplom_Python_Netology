@@ -3,23 +3,36 @@ from rest_framework import serializers
 
 from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order
 
-from djoser.compat import get_user_email, get_user_email_field_name
 from djoser.conf import settings
 from djoser.serializers import UserCreateSerializer, UserSerializer
 
-
+from django.db.models import Q
+from rest_framework.exceptions import ValidationError
 
 class ContactSerializer(ModelSerializer):
     class Meta:
         model = Contact
         fields = ('id', 'user', 'phone', 'adress',)
-        read_only_fields = ('id',)
-        extra_kwargs = {
-            'user': {'write_only': True},
-        }
+        read_only_fields = ('id', ' user')
+
+    # Обновить контакт можно только если значения обновляемых полей не достигли лимита (5 адресов, 1 телефон).
+    # Если достигли, удаляем один из контактов и создаем новый
+    def validate(self, data):
+        request = self.context.get('request')
+        phone_count = Contact.objects.filter(Q(user=request.user.id) & ~Q(phone=None)).count()
+        print(phone_count)        
+        adress_count = Contact.objects.filter(Q(user=request.user.id) &  ~Q(adress=None)).count()
+        print(adress_count)
+        if request.data.get('phone') == None and request.data.get('adress') == None:
+            raise ValidationError({'error': 'Заполните телефон или адрес'})
+        elif (request.data.get('phone') != None and phone_count >= 1) or (request.data.get('adress') != None and adress_count >= 5):
+            raise ValidationError({'error': 'Вы можете добавить не более 1 телефона и 5 адресов'})
+        else:
+            return data
+        
 
 class CastomUserCreateSerializer(UserCreateSerializer):
-    contacts = ContactSerializer(read_only=True, many = True)
+    password = serializers.CharField(style={"input_type": "password"}, write_only=True)
 
     class Meta:
         model = User
@@ -27,7 +40,7 @@ class CastomUserCreateSerializer(UserCreateSerializer):
             settings.LOGIN_FIELD,
             settings.USER_ID_FIELD,
             'usertype',
-            'contacts',
+            'password',
         )
 
 class CastomUserSerializer(UserSerializer):
