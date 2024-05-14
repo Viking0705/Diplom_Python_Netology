@@ -19,12 +19,13 @@ from django.urls import path, include
 
 from rest_framework.routers import DefaultRouter
 
-from backend.views import ContactViewSet, LoadCatalog, ShopViewSet, ProductInfoViewSet
+from backend.views import ContactViewSet, LoadCatalog, ShopViewSet, ProductInfoViewSet, BasketViewSet
 
 r = DefaultRouter()
 r.register(r'contact', ContactViewSet, basename='Contact')
 r.register(r'shop', ShopViewSet, basename='Shop')
 r.register(r'product', ProductInfoViewSet, basename='ProductInfo')
+r.register(r'basket', BasketViewSet, basename='Basket')
 
 
 urlpatterns = [
@@ -34,19 +35,3 @@ urlpatterns = [
     path('auth/', include('djoser.urls.authtoken')),
     path('load_catalog/', LoadCatalog.as_view())
 ]
-# ] + r.urls
-
-# contact_count_rec = ContactViewSet.as_view({
-#     'post': 'count_rec',
-#     'put': 'count_rec',
-#     'patch': 'count_rec',
-#     'delete': 'destroy'
-# })
-
-# urlpatterns = format_suffix_patterns([
-#     # path('admin/', admin.site.urls),
-#     # path('auth/', include('djoser.urls')),
-#     # path('auth/', include('djoser.urls.authtoken')),
-#     path('contact/', contact_count_rec, name='contact-count-rec')
-# ]
-# )

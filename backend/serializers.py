@@ -1,7 +1,7 @@
 from rest_framework.serializers import ModelSerializer
 from rest_framework import serializers
 
-from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order
+from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order, OrderItem
 
 from djoser.conf import settings
 from djoser.serializers import UserCreateSerializer, UserSerializer
@@ -87,3 +87,38 @@ class ProductInfoSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductInfo
         fields = ('id', 'product', 'model', 'quantity', 'price', 'price_rrc', 'shop',)
+
+###
+class OrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderItem
+        fields = ('id', 'product_info', 'quantity', 'order',)
+        read_only_fields = ('id',)
+        extra_kwargs = {
+            'order': {'write_only': True}
+        }
+
+
+class OrderItemCreateSerializer(OrderItemSerializer):
+    product_info = ProductInfoSerializer(read_only=True)
+
+class OrderSerializer(serializers.ModelSerializer):
+    user = CastomUserSerializer(read_only=True)
+    ordered_items = OrderItemCreateSerializer(read_only=True, many=True)
+
+    total_sum = serializers.IntegerField()
+
+    class Meta:
+        model = Order
+        fields = ('id', 'user', 'ordered_items', 'state', 'dt', 'total_sum',)
+        read_only_fields = ('id',)
+##
+
+
+
+# class OrderSerializer(serializers.ModelSerializer):
+#     product_info = ProductInfoSerializer(read_only=True)
+
+#     class Meta:
+#         model = Order
+#         fields = ('id', 'user', 'product_info', 'quantity', 'price', 'price_rrc', 'date',)

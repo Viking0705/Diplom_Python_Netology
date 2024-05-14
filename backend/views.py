@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet, ViewSet
-from django.db.models import Q
+from django.db.models import Q, F, Sum
 from django.db.models import Sum
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
@@ -17,8 +17,8 @@ import yaml
 import requests
 
 
-from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order
-from .serializers import  ContactSerializer, ShopSerializer, ProductInfoSerializer
+from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order, OrderItem
+from .serializers import  ContactSerializer, ShopSerializer, ProductInfoSerializer, OrderSerializer
 from .permissions import IsOwner, IsOwnerOrReadOnly, IsShop, IsOwnerProdInf, IsBuyer
 
 
@@ -115,7 +115,68 @@ class ProductInfoViewSet(ModelViewSet):
 
 class BasketViewSet(ModelViewSet):
     queryset = Order.objects.all()
+    serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated, IsBuyer, IsOwner]
 
+    def get_queryset(self):
+        data = Order.objects.filter(user = self.request.user.id, state = 'basket')\
+        .annotate(total_sum=Sum(F('ordered_items__product_info__price') * F('ordered_items__quantity')))
+        print(data)
+        return data
+    
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+        product_info_id = request.data.get('product_info_id')
+        wish_quantity = int(request.data.get('quantity'))      
+
+        if ProductInfo.objects.filter(id=product_info_id).exists():
+            stock_quantity = ProductInfo.objects.get(id=product_info_id).quantity
+            quantity = (stock_quantity if stock_quantity < wish_quantity else wish_quantity)
+            basket, created = Order.objects.get_or_create(state='basket', user_id=self.request.user.id)
+
+            if OrderItem.objects.filter(product_info_id=product_info_id).exists():
+                raise ValidationError('Такой товар уже есть в корзине')
+            else:
+                item, created = OrderItem.objects.get_or_create(order_id=basket.id,
+                                                                quantity=quantity,
+                                                                product_info_id=product_info_id)
+                return Response(status=status.HTTP_201_CREATED)
+        else:
+   
+            raise ValidationError('Такого товара нет в каталоге')
+
+    
+    def update(self, request, *args, **kwargs):
+        product_info_id = self.kwargs.get('pk')
+        wish_quantity = int(request.data.get('quantity'))
+
+        product_info_id_in_basket = list(OrderItem.objects.values_list("product_info_id", flat=True))
+        if int(product_info_id) in product_info_id_in_basket:
+            stock_quantity = ProductInfo.objects.get(id=product_info_id).quantity
+            quantity = (stock_quantity if stock_quantity < wish_quantity  else wish_quantity)
+            item = OrderItem.objects.filter(product_info_id=product_info_id).update(quantity=quantity)
+        else:    
+            raise ValidationError("Такого товара нет в корзине")
+
+        return Response(status=status.HTTP_200_OK)
+    
+    def delete(self, request, *args, **kwargs):
+        product_info_id = request.data.get('product_info_id')
+        # order_id = self.kwargs.get('pk')
+        # print(int(product_info_id))
+        # print(int(order_id))
+
+        # удаление товара из корзины
+        if int(product_info_id)>0:
+            print(product_info_id)
+            item = OrderItem.objects.filter(product_info_id=product_info_id).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        
+        # удаление корзины по id заказа (очистка корзины):
+        order_id = self.kwargs.get('pk')
+        if int(order_id)>0:
+            print('Удаляем')
+            item = Order.objects.filter(id=order_id).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        else:
+            print('Корзины нет')
+            return False
