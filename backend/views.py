@@ -114,7 +114,7 @@ class ProductInfoViewSet(ModelViewSet):
     
 
 class BasketViewSet(ModelViewSet):
-    queryset = Order.objects.all()
+    # queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated, IsBuyer, IsOwner]
 
@@ -122,6 +122,8 @@ class BasketViewSet(ModelViewSet):
         data = Order.objects.filter(user = self.request.user.id, state = 'basket')\
         .annotate(total_sum=Sum(F('ordered_items__product_info__price') * F('ordered_items__quantity')))
         print(data)
+        if not data:
+            return Response(status=status.HTTP_404_NOT_FOUND, data={'error': 'Заказов в корзине нет'})    
         return data
     
     def create(self, request, *args, **kwargs):
@@ -133,7 +135,7 @@ class BasketViewSet(ModelViewSet):
             quantity = (stock_quantity if stock_quantity < wish_quantity else wish_quantity)
             basket, created = Order.objects.get_or_create(state='basket', user_id=self.request.user.id)
 
-            if OrderItem.objects.filter(product_info_id=product_info_id).exists():
+            if OrderItem.objects.filter(product_info_id=product_info_id, order_id__state='basket').exists():
                 raise ValidationError('Такой товар уже есть в корзине')
             else:
                 item, created = OrderItem.objects.get_or_create(order_id=basket.id,
@@ -180,3 +182,50 @@ class BasketViewSet(ModelViewSet):
         else:
             print('Корзины нет')
             return False
+        
+class OrderViewSet(ModelViewSet):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated, IsBuyer, IsOwner]
+
+    def get_queryset(self):
+        data = Order.objects.filter(user = self.request.user.id, state = 'basket')\
+        .annotate(total_sum=Sum(F('ordered_items__product_info__price') * F('ordered_items__quantity')))
+        return data
+    
+    def create(self, request, *args, **kwargs):
+
+        if request.data.get('contact_id') == None:
+            raise ValidationError('Для оформления заказа нужны контакты покупателя')
+
+        for q in OrderItem.objects.filter(order__state='basket').values_list("product_info_id", "quantity"):
+            print(q)
+
+            if q[1] > ProductInfo.objects.get(id=q[0]).quantity:
+                raise ValidationError('На складе недостаточно товара')
+            else:
+                ProductInfo.objects.filter(id=q[0]).update(quantity= F('quantity') - q[1])
+
+
+        new_order = Order.objects.get(user_id = request.user.id,
+                                    state ='basket').id
+        Order.objects.filter(user_id = request.user.id,
+                                           state ='basket').update(state='new', contact_id = request.data.get('contact_id'))
+        
+      
+
+    
+
+        send_mail('New order My_shop',
+                  f"Вы оформили новый заказ № {new_order}.", 
+                  settings.DEFAULT_FROM_EMAIL,
+                  [request.user.email], fail_silently=False)
+        
+        # product_in_order = OrderItem.objects.filter(order=new_order).values_list('product_info_id', flat=True)
+        # shop_in_order = OrderItem.objects.filter(order=new_order).values_list('product_info__shop_id', flat=True)
+        shop_email_in_order = OrderItem.objects.filter(order=new_order).values_list('product_info__shop_id__user__email', flat=True).distinct()
+        print(shop_email_in_order)
+        send_mail('New_order',
+                  f"Магазин получил новый заказ № {new_order}.", 
+                  settings.DEFAULT_FROM_EMAIL,
+                  shop_email_in_order, fail_silently=False)
+        return Response(status=status.HTTP_201_CREATED)
