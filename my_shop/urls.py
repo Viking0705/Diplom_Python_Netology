@@ -19,7 +19,7 @@ from django.urls import path, include
 
 from rest_framework.routers import DefaultRouter
 
-from backend.views import ContactViewSet, LoadCatalog, ShopViewSet, ProductInfoViewSet, BasketViewSet, OrderViewSet
+from backend.views import ContactViewSet, LoadCatalog, ShopViewSet, ProductInfoViewSet, BasketViewSet, OrderViewSet, OrderShopViewSet
 
 r = DefaultRouter()
 r.register(r'contact', ContactViewSet, basename='Contact')
@@ -27,6 +27,7 @@ r.register(r'shop', ShopViewSet, basename='Shop')
 r.register(r'product', ProductInfoViewSet, basename='ProductInfo')
 r.register(r'basket', BasketViewSet, basename='Basket')
 r.register(r'order', OrderViewSet, basename='Order')
+r.register(r'order_shop', OrderShopViewSet, basename='OrderShop')
 
 
 urlpatterns = [

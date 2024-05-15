@@ -6,9 +6,10 @@ from django.db import models
 STATE_CHOICES = (
     ('basket', 'Корзина'),
     ('new', 'Новый заказ'),
-    ('confirmed', 'Подтвержден'),
     ('preparation', 'Подготовка товаров'),
+    ('sent', 'Отправлен'),
     ('delivered', 'Доставлен'),
+    ('completed', 'Выполнен'),
     ('canceled', 'Отменен'),
 )
 
@@ -17,9 +18,6 @@ USER_TYPE_CHOICES = (
     ('buyer', 'Покупатель'),
 
 )
-
-
-# Create your models here.
 
 
 class UserManager(BaseUserManager):

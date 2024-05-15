@@ -12,16 +12,15 @@ class IsOwnerOrReadOnly(BasePermission):
         if request.method == 'GET':
             return True
         return request.user.id == obj.user_id
-    
+
+
 class IsShop(BasePermission):
     def has_permission(self, request, view):
-        if request.user.usertype =='shop': # or request.user.is_superuser:
+        if request.user.usertype =='shop':
             return True
         else:
             return False
-        
-    # def has_object_permission(self, request, view, obj):
-    #         return request.user.id == obj.user_id
+
 
 class IsOwnerProdInf(BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -32,7 +31,7 @@ class IsOwnerProdInf(BasePermission):
     
 class IsBuyer(BasePermission):
     def has_permission(self, request, view):
-        if request.user.usertype =='buyer': # or request.user.is_superuser:
+        if request.user.usertype =='buyer':
             return True
         else:
             return False

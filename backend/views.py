@@ -1,32 +1,20 @@
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet, ViewSet
-from django.db.models import Q, F, Sum
-from django.db.models import Sum
-from django.http import JsonResponse
-from django_filters.rest_framework import DjangoFilterBackend
-
-from rest_framework.generics import GenericAPIView
-from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
+from django.db.models import F, Sum
 from rest_framework import status
+from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework import mixins
+from django_filters.rest_framework import DjangoFilterBackend
+from django.conf import settings
+from django.core.mail import send_mail
 
 import yaml
 import requests
 
-
-from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order, OrderItem
+from .models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Contact, Order, OrderItem, STATE_CHOICES
 from .serializers import  ContactSerializer, ShopSerializer, ProductInfoSerializer, OrderSerializer
-from .permissions import IsOwner, IsOwnerOrReadOnly, IsShop, IsOwnerProdInf, IsBuyer
-
-
-from django.core.validators import URLValidator
-
-from django.conf import settings
-
-from django.core.mail import send_mail
+from .permissions import IsOwner, IsShop, IsOwnerProdInf, IsBuyer
 
 class ContactViewSet(ModelViewSet):
     queryset = Contact.objects.all()
@@ -48,16 +36,13 @@ class LoadCatalog(APIView):
 
             get_shop_name = data.get('shop')    
             if get_shop_name:
-                print(data.get('shop'))
                 shop, created = Shop.objects.get_or_create(name=get_shop_name,
                                                            url = url,
                                                            state = True,
                                                            user_id = request.user.id)
-                print(shop.id)
 
                 for cat in data.get('categories'):
                     category, created= Category.objects.get_or_create(id=cat.get('id'), name=cat.get('name'))
-                    print(created)
                     category.shops.add(shop.id)
                     category.save()
 
@@ -83,10 +68,6 @@ class LoadCatalog(APIView):
 class ShopViewSet(ModelViewSet):
     queryset = Shop.objects.all()
     serializer_class = ShopSerializer
-    # permission_classes = [IsAuthenticated, IsOwnerOrReadOnly,]
-
-    # def get_queryset(self):
-    #     return Shop.objects.all().filter(state=True)
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -96,7 +77,6 @@ class ShopViewSet(ModelViewSet):
         return [permission() for permission in permission_classes]
 
 class ProductInfoViewSet(ModelViewSet):
-    # queryset = ProductInfo.objects.all()
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['shop', 'product__category', ]
     serializer_class = ProductInfoSerializer
@@ -105,7 +85,6 @@ class ProductInfoViewSet(ModelViewSet):
         return ProductInfo.objects.filter(shop__state=True)
 
     def get_permissions(self):
-        print(self.action)
         if self.action in ['list', 'retrieve']:
             permission_classes = []
         else:
@@ -114,14 +93,12 @@ class ProductInfoViewSet(ModelViewSet):
     
 
 class BasketViewSet(ModelViewSet):
-    # queryset = Order.objects.all()
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated, IsBuyer, IsOwner]
 
     def get_queryset(self):
         data = Order.objects.filter(user = self.request.user.id, state = 'basket')\
         .annotate(total_sum=Sum(F('ordered_items__product_info__price') * F('ordered_items__quantity')))
-        print(data)
         if not data:
             return Response(status=status.HTTP_404_NOT_FOUND, data={'error': 'Заказов в корзине нет'})    
         return data
@@ -163,32 +140,27 @@ class BasketViewSet(ModelViewSet):
     
     def delete(self, request, *args, **kwargs):
         product_info_id = request.data.get('product_info_id')
-        # order_id = self.kwargs.get('pk')
-        # print(int(product_info_id))
-        # print(int(order_id))
 
         # удаление товара из корзины
-        if int(product_info_id)>0:
-            print(product_info_id)
+        if int(product_info_id) > 0:
             item = OrderItem.objects.filter(product_info_id=product_info_id).delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         
         # удаление корзины по id заказа (очистка корзины):
         order_id = self.kwargs.get('pk')
-        if int(order_id)>0:
-            print('Удаляем')
+        if int(order_id) > 0:
             item = Order.objects.filter(id=order_id).delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         else:
-            print('Корзины нет')
             return False
-        
+
+
 class OrderViewSet(ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated, IsBuyer, IsOwner]
 
     def get_queryset(self):
-        data = Order.objects.filter(user = self.request.user.id, state = 'basket')\
+        data = Order.objects.filter(user = self.request.user.id, state__in=list(list(zip(*STATE_CHOICES))[0]))\
         .annotate(total_sum=Sum(F('ordered_items__product_info__price') * F('ordered_items__quantity')))
         return data
     
@@ -198,34 +170,80 @@ class OrderViewSet(ModelViewSet):
             raise ValidationError('Для оформления заказа нужны контакты покупателя')
 
         for q in OrderItem.objects.filter(order__state='basket').values_list("product_info_id", "quantity"):
-            print(q)
-
             if q[1] > ProductInfo.objects.get(id=q[0]).quantity:
                 raise ValidationError('На складе недостаточно товара')
             else:
                 ProductInfo.objects.filter(id=q[0]).update(quantity= F('quantity') - q[1])
 
-
         new_order = Order.objects.get(user_id = request.user.id,
                                     state ='basket').id
         Order.objects.filter(user_id = request.user.id,
                                            state ='basket').update(state='new', contact_id = request.data.get('contact_id'))
-        
-      
-
-    
-
+ 
         send_mail('New order My_shop',
                   f"Вы оформили новый заказ № {new_order}.", 
                   settings.DEFAULT_FROM_EMAIL,
                   [request.user.email], fail_silently=False)
-        
-        # product_in_order = OrderItem.objects.filter(order=new_order).values_list('product_info_id', flat=True)
-        # shop_in_order = OrderItem.objects.filter(order=new_order).values_list('product_info__shop_id', flat=True)
+
         shop_email_in_order = OrderItem.objects.filter(order=new_order).values_list('product_info__shop_id__user__email', flat=True).distinct()
-        print(shop_email_in_order)
-        send_mail('New_order',
+        send_mail('Новый заказ My_shop',
                   f"Магазин получил новый заказ № {new_order}.", 
                   settings.DEFAULT_FROM_EMAIL,
                   shop_email_in_order, fail_silently=False)
         return Response(status=status.HTTP_201_CREATED)
+    
+    def update(self, request, *args, **kwargs):
+        order_id= self.kwargs.get('pk')
+        order_state = Order.objects.get(id=order_id).state
+
+        Order.objects.filter(id=order_id).update(state='canceled')
+
+        if order_state in ['new', 'preparation']:
+            buyer_id = Order.objects.get(id=order_id).user_id
+            buyer_email = User.objects.get(id=buyer_id).email
+            send_mail('Отмена заказ My_shop',
+                  f"Вы отменили заказ № {order_id}.", 
+                  settings.DEFAULT_FROM_EMAIL,
+                  [buyer_email], fail_silently=False)
+            for q in OrderItem.objects.filter(order_id=order_id).values_list('product_info_id', 'quantity'):
+                ProductInfo.objects.filter(id=q[0]).update(quantity= F('quantity') + q[1])            
+        return Response(status=status.HTTP_200_OK)
+
+
+class OrderShopViewSet(ModelViewSet):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated, IsShop]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['state', ]
+
+    def get_queryset(self):
+        data= Order.objects.filter(ordered_items__product_info__shop__user_id = self.request.user.id, 
+                                   state__in=['new', 'preparation', 'sent', 'deliverd', 'completed', 'canceled'])\
+            .annotate(total_sum=Sum(F('ordered_items__product_info__price') * F('ordered_items__quantity')))
+        return data
+    
+    def update(self, request, *args, **kwargs):
+        upd_state_dict = {
+            'new': 'preparation',
+            'preparation':'sent',
+            'sent': 'delivered',
+            'delivered': 'completed',            
+        }
+
+        order_id= self.kwargs.get('pk')
+        if int(order_id) not in Order.objects.all().values_list('id', flat=True):
+            raise ValidationError('Такого заказа нет')
+
+        current_state = Order.objects.get(id=order_id).state
+        if current_state in upd_state_dict:
+            upd_state = upd_state_dict.get(current_state)
+            Order.objects.filter(id=order_id).update(state=upd_state)
+            buyer_email = Order.objects.filter(id=order_id).values_list('user_id__email', flat=True).distinct()
+            send_mail('Изменение статуса заказа My_shop',
+                  f"Ваш заказ № {order_id} изменил статус на: \"{dict(STATE_CHOICES)[upd_state]}\".",
+                  settings.DEFAULT_FROM_EMAIL,
+                  list(buyer_email), fail_silently=False)
+        else:
+            raise ValidationError('Статус заказа не может быть изменен')            
+        return Response(status=status.HTTP_200_OK)
+    

@@ -43,6 +43,7 @@ class CastomUserCreateSerializer(UserCreateSerializer):
             'password',
         )
 
+
 class CastomUserSerializer(UserSerializer):
     contacts = ContactSerializer(read_only=True, many = True)
 
@@ -55,9 +56,6 @@ class CastomUserSerializer(UserSerializer):
             'contacts',
         )
         read_only_fields = (settings.LOGIN_FIELD,)
-
-
-
 
 
 class ShopSerializer(serializers.ModelSerializer):
@@ -74,6 +72,7 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ('id', 'name',)
         read_only_fields = ('id',)
 
+
 class ProductSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
 
@@ -81,14 +80,25 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = ('id', 'name', 'category',)
 
+
+class ProductParameterSerializer(serializers.ModelSerializer):
+    parameter = serializers.StringRelatedField()
+
+    class Meta:
+        model = ProductParameter
+        fields = ('parameter', 'value',)
+
+
 class ProductInfoSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
+    product_parameters = ProductParameterSerializer(read_only=True, many=True)
 
     class Meta:
         model = ProductInfo
-        fields = ('id', 'product', 'model', 'quantity', 'price', 'price_rrc', 'shop',)
+        fields = ('id', 'product', 'model', 'product_parameters', 'quantity', 'price', 'price_rrc', 'shop', )
+        read_only_fields = ('id',)
 
-###
+
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
@@ -102,23 +112,15 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderItemCreateSerializer(OrderItemSerializer):
     product_info = ProductInfoSerializer(read_only=True)
 
-class OrderSerializer(serializers.ModelSerializer):
-    user = CastomUserSerializer(read_only=True)
-    ordered_items = OrderItemCreateSerializer(read_only=True, many=True)
 
+class OrderSerializer(serializers.ModelSerializer):
+    # user = CastomUserSerializer(read_only=True)
+    ordered_items = OrderItemCreateSerializer(read_only=True, many=True)
+    contact = ContactSerializer(read_only=True)
     total_sum = serializers.IntegerField()
 
     class Meta:
         model = Order
-        fields = ('id', 'user', 'ordered_items', 'state', 'dt', 'total_sum',)
+        fields = ('id', 'ordered_items', 'state', 'dt', 'total_sum', 'contact',)
         read_only_fields = ('id',)
-##
 
-
-
-# class OrderSerializer(serializers.ModelSerializer):
-#     product_info = ProductInfoSerializer(read_only=True)
-
-#     class Meta:
-#         model = Order
-#         fields = ('id', 'user', 'product_info', 'quantity', 'price', 'price_rrc', 'date',)
